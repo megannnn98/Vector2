@@ -20,9 +20,11 @@ public:
     RawMemory &operator=(const RawMemory &rhs) = delete;
 
     RawMemory(RawMemory &&other) noexcept
+        : buffer_{std::exchange(other.buffer_, nullptr)},
+          capacity_{std::exchange(other.capacity_, 0)}
     {
-        Swap(other);
     }
+
     RawMemory &operator=(RawMemory &&rhs) noexcept
     {
         if (this != &rhs)
@@ -116,6 +118,64 @@ public:
         : data_(other.size_), size_(other.size_) //
     {
         std::uninitialized_copy_n(other.data_.GetAddress(), other.size_, data_.GetAddress());
+    }
+
+    Vector(Vector &&other) noexcept
+        : data_{std::move(other.data_)}, size_{other.size_}
+    {
+        other.size_ = 0;
+    }
+// TestCopyAssignment_copy_ctor fail: Assertion failed: 16 != 8 hint: C::copy_ctor != SIZE, /tmp/tmppd2csah2/main.cpp:565
+// подсказка: Вы неверно реализовали оператор присваивания класса Vector. Возможно вы вызываете больше или меньше конструкторов копирования.
+
+
+
+    Vector &operator=(const Vector &rhs)
+    {
+        if (this == &rhs)
+            return (*this);
+
+        if (rhs.size_ > data_.Capacity())
+        {
+            Vector rhs_copy(rhs);
+            Swap(rhs_copy);
+        }
+        else
+        {
+            // у нас больше элементов, надо часть наших затереть
+            if (rhs.size_ < size_)
+            {
+                auto diff = size_ - rhs.size_;
+                std::uninitialized_copy_n(rhs.data_.GetAddress(), rhs.size_, data_.GetAddress());
+                std::destroy_n(data_.GetAddress() + rhs.size_, diff);
+            }
+            // у нас меньше или столько же элементов, ничего не надо затирать
+            else
+            {
+                std::uninitialized_copy_n(rhs.data_.GetAddress(), rhs.size_, data_.GetAddress());
+            }
+
+            size_ = rhs.size_;
+        }
+
+        return *this;
+    }
+
+    Vector &operator=(Vector &&rhs) noexcept
+    {
+        if (this == &rhs)
+            return (*this);
+
+        data_.Swap(rhs.data_);
+        size_ = rhs.size_;
+        rhs.size_ = 0;
+        return *this;
+    }
+
+    void Swap(Vector &other) noexcept
+    {
+        data_.Swap(other.data_);
+        std::swap(size_, other.size_);
     }
 
     size_t Size() const noexcept
