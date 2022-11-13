@@ -4,6 +4,7 @@
 #include <new>
 #include <utility>
 #include <memory>
+#include <algorithm>
 
 template <typename T>
 class RawMemory
@@ -125,10 +126,6 @@ public:
     {
         other.size_ = 0;
     }
-// TestCopyAssignment_copy_ctor fail: Assertion failed: 16 != 8 hint: C::copy_ctor != SIZE, /tmp/tmppd2csah2/main.cpp:565
-// подсказка: Вы неверно реализовали оператор присваивания класса Vector. Возможно вы вызываете больше или меньше конструкторов копирования.
-
-
 
     Vector &operator=(const Vector &rhs)
     {
@@ -143,16 +140,18 @@ public:
         else
         {
             // у нас больше элементов, надо часть наших затереть
-            if (rhs.size_ < size_)
+            if (rhs.size_ >= size_)
             {
-                auto diff = size_ - rhs.size_;
-                std::uninitialized_copy_n(rhs.data_.GetAddress(), rhs.size_, data_.GetAddress());
-                std::destroy_n(data_.GetAddress() + rhs.size_, diff);
+                auto diff = rhs.size_ - size_;
+                std::copy_n(rhs.data_.GetAddress(), size_, data_.GetAddress());
+                std::uninitialized_copy_n(rhs.data_.GetAddress() + size_, diff, data_.GetAddress() + size_);
             }
             // у нас меньше или столько же элементов, ничего не надо затирать
             else
             {
-                std::uninitialized_copy_n(rhs.data_.GetAddress(), rhs.size_, data_.GetAddress());
+                auto diff = size_ - rhs.size_;
+                std::copy_n(rhs.data_.GetAddress(), rhs.size_, data_.GetAddress());
+                std::destroy_n(data_.GetAddress() + rhs.size_, diff);
             }
 
             size_ = rhs.size_;
