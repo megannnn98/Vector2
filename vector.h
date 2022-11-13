@@ -14,8 +14,19 @@ public:
         , capacity_(size)
         , size_(size)  //
     {
-        for (size_t i = 0; i != size; ++i) {
-            new (data_ + i) T();
+        size_t i = 0;
+        try {
+            for (; i != size; ++i) {
+                new (data_ + i) T();
+            }
+        } catch (...) {
+            // В переменной i содержится количество созданных элементов.
+            // Теперь их надо разрушить
+            DestroyN(data_, i);
+            // Освобождаем память, выделенную через Allocate
+            Deallocate(data_);
+            // Перевыбрасываем пойманное исключение, чтобы сообщить об ошибке создания объекта
+            throw;
         }
     }
 
@@ -24,8 +35,19 @@ public:
         , capacity_(other.size_)
         , size_(other.size_)  //
     {
-        for (size_t i = 0; i != other.size_; ++i) {
-            CopyConstruct(data_ + i, other.data_[i]);
+        size_t i = 0;
+        try {
+            for (;i != other.size_; ++i) {
+                CopyConstruct(data_ + i, other.data_[i]);
+            }
+        } catch (...) {
+            // В переменной i содержится количество созданных элементов.
+            // Теперь их надо разрушить
+            DestroyN(data_, i);
+            // Освобождаем память, выделенную через Allocate
+            Deallocate(data_);
+            // Перевыбрасываем пойманное исключение, чтобы сообщить об ошибке создания объекта
+            throw;
         }
     }
 
@@ -51,9 +73,21 @@ public:
             return;
         }
         T* new_data = Allocate(new_capacity);
-        for (size_t i = 0; i != size_; ++i) {
-            CopyConstruct(new_data + i, data_[i]);
+
+        size_t i = 0;
+        try
+        {
+            for (; i != size_; ++i) {
+                CopyConstruct(new_data + i, data_[i]);
+            }
         }
+        catch(...)
+        {
+            DestroyN(new_data, i);
+            Deallocate(new_data);
+            throw;
+        }
+
         DestroyN(data_, size_);
         Deallocate(data_);
 
