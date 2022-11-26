@@ -5,7 +5,6 @@
 #include <utility>
 #include <memory>
 #include <algorithm>
-#include <vector>
 
 template <typename T>
 class RawMemory
@@ -248,6 +247,109 @@ public:
 
         ++size_;
         return *(begin() + size_ - 1);
+    }
+
+    template <typename... Args>
+    iterator Emplace(const_iterator pos, Args&&... args)
+    {
+        std::size_t index = std::distance(cbegin(), pos);
+
+        if (size_ == data_.Capacity())
+        {
+            std::size_t index_to_end = std::distance(pos, cend());
+            RawMemory<T> new_data((size_ == 0) ? 1 : 2 * size_);
+            new(new_data.GetAddress() + index)T(std::forward<Args>(args)...);
+            if constexpr (std::is_nothrow_move_constructible_v<T> || 
+                            !std::is_copy_constructible_v<T>) 
+            {
+                try
+                {
+                    std::uninitialized_move_n(begin(), 
+                                                index, 
+                                                new_data.GetAddress());
+                    // throw;
+                }
+                catch(...)
+                {
+                    std::destroy_n(begin(), index);
+                }
+
+                try
+                {
+                    std::uninitialized_move_n(begin() + index, 
+                                                index_to_end, 
+                                                new_data.GetAddress() + index + 1);
+                    // throw;
+                }
+                catch(...)
+                {
+                    std::destroy_n(begin() + index, index_to_end);
+                }
+            }
+            else 
+            {
+                try
+                {
+                    std::uninitialized_copy_n(begin(), 
+                                                index, 
+                                                new_data.GetAddress());
+                    // throw;
+                }
+                catch(...)
+                {
+                    std::destroy_n(begin(), index);
+                }
+
+                try
+                {
+                    std::uninitialized_copy_n(begin() + index, 
+                                                index_to_end, 
+                                                new_data.GetAddress() + index + 1);
+                    // throw;
+                }
+                catch(...)
+                {
+                    std::destroy_n(begin() + index, index_to_end);
+                }
+            }
+
+
+            std::destroy_n(begin(), size_);
+            data_.Swap(new_data);
+            
+        }
+        else
+        {
+            if (size_ != index) {
+                new (end()) T(std::forward<T>(*(end() - 1)));
+                std::move_backward(begin() + index, end() - 1, end());
+                data_[index] = T(std::forward<Args>(args)...);
+            } else {
+                new (begin() + index) T(std::forward<Args>(args)...);
+            }
+        }
+        ++size_;
+        return begin() + index;
+    }
+
+    iterator Erase(const_iterator pos)
+    {
+        auto index = std::distance(cbegin(), pos);
+        std::move(begin() + index + 1, end(), begin() + index);
+        std::destroy_n(end()-1, 1);
+        --size_;
+
+        return begin() + index;
+    }
+
+    iterator Insert(const_iterator pos, const T& value)
+    {
+        return Emplace(pos, value);
+    }
+
+    iterator Insert(const_iterator pos, T&& value)
+    {
+        return Emplace(pos, std::move(value));
     }
 
     void PushBack(const T &value)
