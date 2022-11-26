@@ -5,6 +5,7 @@
 #include <utility>
 #include <memory>
 #include <algorithm>
+#include <vector>
 
 template <typename T>
 class RawMemory
@@ -107,6 +108,9 @@ template <typename T>
 class Vector
 {
 public:
+    using iterator = T *;
+    using const_iterator = const T *;
+
     Vector() = default;
 
     explicit Vector(size_t size)
@@ -171,6 +175,31 @@ public:
         return *this;
     }
 
+    iterator begin() noexcept
+    {
+        return data_.GetAddress();
+    }
+    iterator end() noexcept
+    {
+        return data_.GetAddress() + size_;
+    }
+    const_iterator begin() const noexcept
+    {
+        return data_.GetAddress();
+    }
+    const_iterator end() const noexcept
+    {
+        return data_.GetAddress() + size_;
+    }
+    const_iterator cbegin() const noexcept
+    {
+        return data_.GetAddress();
+    }
+    const_iterator cend() const noexcept
+    {
+        return data_.GetAddress() + size_;
+    }
+
     void Resize(size_t new_size)
     {
         if (new_size == size_)
@@ -192,12 +221,41 @@ public:
         size_ = new_size;
     }
 
+    template <typename... Args>
+    T &EmplaceBack(Args &&...args)
+    {
+        if (size_ == data_.Capacity())
+        {
+            RawMemory<T> new_data((size_ == 0) ? 1 : 2 * size_);
+
+            new (new_data.GetAddress() + size_) T(std::forward<Args>(args)...);
+            if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>)
+            {
+                std::uninitialized_move_n(begin(), size_, new_data.GetAddress());
+            }
+            else
+            {
+                std::uninitialized_copy_n(begin(), size_, new_data.GetAddress());
+            }
+
+            std::destroy_n(begin(), size_);
+            data_.Swap(new_data);
+        }
+        else
+        {
+            new (begin() + size_) T(std::forward<Args>(args)...);
+        }
+
+        ++size_;
+        return *(begin() + size_ - 1);
+    }
+
     void PushBack(const T &value)
     {
         if (size_ == Capacity())
         {
             RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-            new(new_data + size_)T(value);
+            new (new_data + size_) T(value);
             if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>)
             {
                 std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
@@ -209,9 +267,9 @@ public:
             std::destroy_n(data_.GetAddress(), size_);
             data_.Swap(new_data);
         }
-        else 
+        else
         {
-            new(data_ + size_)T(value);
+            new (data_ + size_) T(value);
         }
         ++size_;
     }
@@ -221,7 +279,7 @@ public:
         if (size_ == Capacity())
         {
             RawMemory<T> new_data(size_ == 0 ? 1 : size_ * 2);
-            new(new_data + size_)T(std::move(value));
+            new (new_data + size_) T(std::move(value));
             if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>)
             {
                 std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
@@ -233,16 +291,16 @@ public:
             std::destroy_n(data_.GetAddress(), size_);
             data_.Swap(new_data);
         }
-        else 
+        else
         {
-            new(data_ + size_)T(std::move(value));
+            new (data_ + size_) T(std::move(value));
         }
         ++size_;
     }
 
     void PopBack()
     {
-        data_[size_-1].~T();
+        data_[size_ - 1].~T();
         size_--;
     }
 
